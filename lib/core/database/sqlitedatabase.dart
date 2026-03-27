@@ -2,23 +2,39 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'dart:async';
 
 class Sqlitedatabase {
-  static const String tableName = 'hsn';
   static const String dbName = 'NRSDigital.db';
   
-  static Database? _database;
+static Database? _database;
+  
+  // This "Completer" acts as a lock/gate
+  static Completer<Database>? _completer;
 
-  /// Get the database instance
   static Future<Database> get database async {
+    // 1. If it's already open, return it immediately (Fastest path)
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+
+    // 2. If someone ELSE is already initializing it, wait for them
+    if (_completer != null) return _completer!.future;
+
+    // 3. If we are the first ones here, start the process
+    _completer = Completer<Database>();
+    
+    try {
+      _database = await _initDatabase();
+      _completer!.complete(_database); // Tell everyone waiting we are done!
+      return _database!;
+    } catch (e) {
+      _completer = null; // Reset so we can try again if it failed
+      rethrow;
+    }
   }
 
-  /// Initialize the database
-  static Future<Database> _initDatabase() async {
-    final Directory documentsDirectory = await getApplicationDocumentsDirectory();
+
+static Future<Database> _initDatabase() async {
+      final Directory documentsDirectory = await getApplicationDocumentsDirectory();
     
     // 2. Create the full path to the database file
     final String path = join(documentsDirectory.path, dbName);
@@ -26,14 +42,15 @@ class Sqlitedatabase {
     return openDatabase(
       path,
       version: 1,
-      onCreate: _createDatabase,
-    );
+      onCreate: _createDatabase
+      );
   }
 
-  /// Create database tables
   static Future<void> _createDatabase(Database db, int version) async {
+
+
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS $tableName (
+      CREATE TABLE IF NOT EXISTS HSN (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         hsncode TEXT UNIQUE NOT NULL,
         taxrate INTEGER NOT NULL,
@@ -41,14 +58,26 @@ class Sqlitedatabase {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     ''');
+  
+
+     await db.execute('''
+    CREATE TABLE Product(
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    hsnId INTEGER NOT NULL,
+    sku VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    qty INTEGER NOT NULL,
+    FOREIGN KEY (hsnId) REFERENCES HSN(id)
+)
+ ''');
+
   }
 
-  /// Insert a new HSN code
-  static Future<int> create<T>(String table, Map<String,dynamic> item) async {
+  static Future<int> create<T>(String tableName, Map<String,dynamic> item) async {
     try {
       final db = await database;
       return await db.insert(
-        table,
+        tableName,
         item,
         conflictAlgorithm: ConflictAlgorithm.fail,
       );
@@ -60,12 +89,11 @@ class Sqlitedatabase {
     }
   }
 
-  /// Get all HSN codes
-  static Future <List<Map<String,dynamic>>> get(String table) async {
+  static Future <List<Map<String,dynamic>>> get(String tableName) async {
     try {
       final db = await database;
       final result = await db.query(
-        table
+        tableName
       );
        final json = result.toList();
       return json;
@@ -74,12 +102,11 @@ class Sqlitedatabase {
     }
   }
 
-  /// Get a specific HSN code by ID
-  static Future<Object?> getById(String table,int id) async {
+  static Future<Object?> getById(String tableName,int id) async {
     try {
       final db = await database;
       final result = await db.query(
-        table,
+        tableName,
         where: 'id = ?',
         whereArgs: [id],
       );
@@ -94,32 +121,13 @@ class Sqlitedatabase {
     }
   }
 
-  /// Get HSN code by HSN code value
-  static Future<Object?> exist(String hsncode) async {
-    try {
-      final db = await database;
-      final result = await db.query(
-        tableName,
-        where: 'hsncode = ?',
-        whereArgs: [hsncode],
-      );
 
-      if (result.isEmpty) return null;
-
-      final json = result.first;
-      return json;
-    } catch (e) {
-      throw Exception('Failed to fetch HSN code: $e');
-    }
-  }
-
-  /// Update an existing HSN code
-  static Future<int> update(String table, int id, Map<String,dynamic> item) async {
+  static Future<int> update(String tableName, int id, Map<String,dynamic> item) async {
     try {
       final db = await database;
 
       return await db.update(
-        table,
+        tableName,
         item,
         where: 'id = ?',
         whereArgs: [id],
@@ -129,8 +137,7 @@ class Sqlitedatabase {
     }
   }
 
-  /// Delete an HSN code
-  static Future<int> delete(int id) async {
+  static Future<int> delete(String tableName, int id) async {
     try {
       final db = await database;
       return await db.delete(
@@ -143,39 +150,15 @@ class Sqlitedatabase {
     }
   }
 
-  /// Search HSN codes by code (partial match)
-  // static Future<List<HSN>> search(String query) async {
+  // static Future<int> getCount() async {
   //   try {
   //     final db = await database;
-  //     final result = await db.query(
-  //       tableName,
-  //       where: 'hsncode LIKE ?',
-  //       whereArgs: ['%$query%'],
-  //       orderBy: 'created_at DESC',
-  //     );
-
-  //     return result.map((json) {
-  //       return HSN(
-  //         id: json['id'] as int?,
-  //         hsncode: json['hsncode'] as String,
-  //         taxrate: json['taxrate'] as int,
-  //       );
-  //     }).toList();
+  //     final result = await db.rawQuery('SELECT COUNT(*) as count FROM $tableName');
+  //     return Sqflite.firstIntValue(result) ?? 0;
   //   } catch (e) {
-  //     throw Exception('Failed to search HSN codes: $e');
+  //     throw Exception('Failed to get HSN count: $e');
   //   }
   // }
-
-  /// Get count of HSN codes
-  static Future<int> getCount() async {
-    try {
-      final db = await database;
-      final result = await db.rawQuery('SELECT COUNT(*) as count FROM $tableName');
-      return Sqflite.firstIntValue(result) ?? 0;
-    } catch (e) {
-      throw Exception('Failed to get HSN count: $e');
-    }
-  }
 
   /// Close the database
   static Future<void> closeDatabase() async {

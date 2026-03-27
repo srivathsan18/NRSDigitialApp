@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:inventory_management/service/service.dart';
+import 'package:inventory_management/core/features/hsn_form/data/hsn_service.dart';
 import '../model/hsn_model.dart';
 
 class HSNFormScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class _HSNFormScreenState extends State<HSNFormScreen> {
 
   Future<void> _loadHSNList() async {
     try {
-      final hsnList = await _hsnService.loadAllHSN();
+      final hsnList = await _hsnService.get();
       if (mounted) {
         setState(() {
           _hsnList = hsnList;
@@ -62,7 +62,7 @@ class _HSNFormScreenState extends State<HSNFormScreen> {
           taxrate: int.parse(_taxRateController.text.trim()),
         );
 
-        await _hsnService.saveHSN(hsn);
+        await _hsnService.save(hsn);
 
         _handleReset();
 
@@ -112,7 +112,7 @@ class _HSNFormScreenState extends State<HSNFormScreen> {
   Future<void> _deleteHSN(HSN hsn) async {
     if (hsn.id == null) return;
     try {
-      await _hsnService.deleteHSN(hsn);
+      await _hsnService.delete(hsn);
       await _loadHSNList(); // Refresh the list after delete
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +206,7 @@ class _HSNFormScreenState extends State<HSNFormScreen> {
           // Full screen overlay when loading
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black,
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

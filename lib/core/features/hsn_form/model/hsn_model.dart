@@ -10,13 +10,13 @@ class HSN {
   });
 
   /// Convert HSN to JSON for database operations
-  Map<String, dynamic> toJson() {
-    return {
+  Map<String, dynamic> toJson() =>
+     {
       'id': id,
       'hsncode': hsncode,
       'taxrate': taxrate,
-    };
-  }
+     };
+  
 
   /// Create HSN from JSON
    factory HSN.fromJson(Map<String, dynamic> json) {
@@ -29,16 +29,4 @@ class HSN {
 
   
 
-  /// Create a copy with modified fields
-  HSN copyWith({
-    int? id,
-    String? hsncode,
-    int? taxrate,
-  }) {
-    return HSN(
-      id: id ?? this.id,
-      hsncode: hsncode ?? this.hsncode,
-      taxrate: taxrate ?? this.taxrate,
-    );
-  }
 }
